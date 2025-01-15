@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Parcel Report Generator</title>
   <link rel="stylesheet" href="https://js.arcgis.com/4.27/esri/themes/light/main.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -37,9 +37,11 @@
     <label for="address">Address</label>
     <input type="text" id="address" placeholder="Enter an address">
     <button id="geocodeBtn">Geocode</button>
+
     <label for="bufferDistance">Buffer Distance (ft)</label>
     <input type="number" id="bufferDistance" placeholder="Enter buffer distance">
     <button id="bufferBtn">Buffer</button>
+    
     <button id="reportBtn">Generate Report</button>
   </div>
 
@@ -55,8 +57,19 @@
       "esri/geometry/Point",
       "esri/identity/IdentityManager",
       "esri/identity/OAuthInfo"
-    ], function(Map, MapView, FeatureLayer, locator, Graphic, geometryEngine, query, Point, IdentityManager, OAuthInfo) {
-      
+    ], function(
+      Map, 
+      MapView, 
+      FeatureLayer, 
+      locator, 
+      Graphic, 
+      geometryEngine, 
+      query, 
+      Point, 
+      IdentityManager, 
+      OAuthInfo
+    ) {
+
       const portalUrl = "https://bhmi.maps.arcgis.com";
 
       // OAuth Configuration
@@ -67,7 +80,7 @@
       });
       IdentityManager.registerOAuthInfos([oauthInfo]);
 
-  // Check if the user is already signed in
+      // Check if the user is already signed in
       IdentityManager.checkSignInStatus(portalUrl + "/sharing")
         .catch(() => IdentityManager.getCredential(portalUrl + "/sharing"));
 
@@ -82,14 +95,21 @@
         zoom: 14
       });
 
+      // Feature layer
       const parcelLayer = new FeatureLayer({
         url: "https://services3.arcgis.com/X0xdaFqVSAx896l1/arcgis/rest/services/Parcels_Benton_Harbor_Viewing/FeatureServer/5"
       });
       map.add(parcelLayer);
 
+      // Geocode URL
       const geocodeUrl = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer";
 
-      // Geocoding Functionality
+      // Store references to graphics so we can remove them selectively
+      let geocodedPointGraphic = null;
+      let bufferGraphic = null;
+      let highlightGraphics = [];
+
+      // Geocoding
       document.getElementById("geocodeBtn").addEventListener("click", function() {
         const address = document.getElementById("address").value;
         if (!address) {
@@ -97,27 +117,34 @@
           return;
         }
 
-        locator.addressToLocations(geocodeUrl, { address: { SingleLine: address } }).then((results) => {
-          if (results.length > 0) {
-            const geocodedPoint = results[0].location;
-            view.goTo({ target: geocodedPoint, zoom: 16 });
+        locator.addressToLocations(geocodeUrl, { address: { SingleLine: address } })
+          .then((results) => {
+            if (results.length > 0) {
+              const geocodedPoint = results[0].location;
+              view.goTo({ target: geocodedPoint, zoom: 16 });
 
-            const pointGraphic = new Graphic({
-              geometry: geocodedPoint,
-              symbol: {
-                type: "simple-marker",
-                color: "red",
-                size: "10px"
+              // Remove any existing geocoded point graphic
+              if (geocodedPointGraphic) {
+                view.graphics.remove(geocodedPointGraphic);
               }
-            });
-            view.graphics.removeAll();
-            view.graphics.add(pointGraphic);
 
-            window.geocodedPoint = geocodedPoint;
-          } else {
-            alert("No results found.");
-          }
-        });
+              // Create and add the new point graphic
+              geocodedPointGraphic = new Graphic({
+                geometry: geocodedPoint,
+                symbol: {
+                  type: "simple-marker",
+                  color: "red",
+                  size: "10px"
+                }
+              });
+              view.graphics.add(geocodedPointGraphic);
+
+              // Store the geocoded geometry for later
+              window.geocodedPoint = geocodedPoint;
+            } else {
+              alert("No results found.");
+            }
+          });
       });
 
       // Buffer and Highlight Parcels
@@ -133,8 +160,24 @@
           return;
         }
 
-        const buffer = geometryEngine.buffer(window.geocodedPoint, bufferDistance, "feet");
-        const bufferGraphic = new Graphic({
+        // Remove previous buffer if it exists
+        if (bufferGraphic) {
+          view.graphics.remove(bufferGraphic);
+          bufferGraphic = null;
+        }
+        // Remove previous highlights if any
+        highlightGraphics.forEach(g => view.graphics.remove(g));
+        highlightGraphics = [];
+
+        // Use geodesicBuffer in feet if your map is in geographic/Web Mercator
+        const buffer = geometryEngine.geodesicBuffer(
+          window.geocodedPoint,
+          bufferDistance,
+          "feet"
+        );
+
+        // Create the buffer graphic
+        bufferGraphic = new Graphic({
           geometry: buffer,
           symbol: {
             type: "simple-fill",
@@ -145,18 +188,16 @@
             }
           }
         });
-
         view.graphics.add(bufferGraphic);
 
+        // Query parcels within the buffer
         const parcelQuery = parcelLayer.createQuery();
         parcelQuery.geometry = buffer;
         parcelQuery.spatialRelationship = "intersects";
         parcelQuery.outFields = ["*"];
 
         parcelLayer.queryFeatures(parcelQuery).then((results) => {
-          view.graphics.removeAll(); // Clear previous graphics
-          view.graphics.add(bufferGraphic); // Re-add buffer graphic
-
+          // Highlight each returned parcel
           results.features.forEach((feature) => {
             const highlightGraphic = new Graphic({
               geometry: feature.geometry,
@@ -170,8 +211,10 @@
               }
             });
             view.graphics.add(highlightGraphic);
+            highlightGraphics.push(highlightGraphic);
           });
 
+          // Store selected features for reporting
           window.selectedParcels = results.features;
         });
       });
