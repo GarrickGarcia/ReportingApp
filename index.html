@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Parcel Report Generator</title>
+  <link rel="stylesheet" href="https://js.arcgis.com/4.27/esri/themes/light/main.css">
+  <style>
+    html, body, #viewDiv {
+      padding: 0;
+      margin: 0;
+      height: 100%;
+      width: 100%;
+    }
+    #ui-pane {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: white;
+      padding: 15px;
+      z-index: 100;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+    #ui-pane input, #ui-pane button {
+      margin: 5px 0;
+      display: block;
+      width: 100%;
+    }
+  </style>
+  <script src="https://js.arcgis.com/4.27/"></script>
+</head>
+<body>
+  <div id="viewDiv"></div>
+  <div id="ui-pane">
+    <label for="address">Address</label>
+    <input type="text" id="address" placeholder="Enter an address">
+    <button id="geocodeBtn">Geocode</button>
+    <button id="reportBtn">Generate Report</button>
+  </div>
+
+  <script>
+    require([
+      "esri/Map",
+      "esri/views/MapView",
+      "esri/layers/FeatureLayer",
+      "esri/rest/locator",
+      "esri/Graphic",
+      "esri/geometry/geometryEngine",
+      "esri/rest/query",
+      "esri/geometry/Point",
+      "esri/identity/IdentityManager"
+    ], function(Map, MapView, FeatureLayer, locator, Graphic, geometryEngine, query, Point, IdentityManager) {
+      
+      // Authenticate user
+      const portalUrl = "https://bhmi.maps.arcgis.com";
+      IdentityManager.registerOAuthInfos([{
+        appId: "YOUR_APP_ID", // Replace with your app ID from ArcGIS Online
+        portalUrl: portalUrl,
+        popup: false
+      }]);
+
+      IdentityManager.checkSignInStatus(portalUrl).catch(() => {
+        IdentityManager.getCredential(portalUrl + "/sharing");
+      });
+
+      // Create the map and view
+      const map = new Map({
+        basemap: "streets-navigation-vector"
+      });
+
+      const view = new MapView({
+        container: "viewDiv",
+        map: map,
+        center: [-86.455, 42.117], // Center on Benton Harbor, MI
+        zoom: 14
+      });
+
+      // Add the parcel feature layer
+      const parcelLayer = new FeatureLayer({
+        url: "https://services3.arcgis.com/X0xdaFqVSAx896l1/arcgis/rest/services/Parcels_Benton_Harbor_Viewing/FeatureServer/5"
+      });
+      map.add(parcelLayer);
+
+      // Geocoding service
+      const geocodeUrl = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer";
+
+      // Add event listener for geocoding
+      document.getElementById("geocodeBtn").addEventListener("click", function() {
+        const address = document.getElementById("address").value;
+        if (!address) {
+          alert("Please enter an address.");
+          return;
+        }
+
+        locator.addressToLocations(geocodeUrl, { address: { SingleLine: address } }).then((results) => {
+          if (results.length > 0) {
+            const geocodedPoint = results[0].location;
+            view.goTo({ target: geocodedPoint, zoom: 16 });
+
+            const pointGraphic = new Graphic({
+              geometry: geocodedPoint,
+              symbol: {
+                type: "simple-marker",
+                color: "red",
+                size: "10px"
+              }
+            });
+            view.graphics.removeAll();
+            view.graphics.add(pointGraphic);
+
+            // Save the geocoded point globally for report generation
+            window.geocodedPoint = geocodedPoint;
+          } else {
+            alert("No results found.");
+          }
+        });
+      });
+
+      // Add event listener for report generation
+      document.getElementById("reportBtn").addEventListener("click", function() {
+        if (!window.geocodedPoint) {
+          alert("Please geocode an address first.");
+          return;
+        }
+
+        // Buffer the geocoded point
+        const buffer = geometryEngine.buffer(window.geocodedPoint, 200, "feet");
+
+        // Query parcels intersecting the buffer
+        const parcelQuery = parcelLayer.createQuery();
+        parcelQuery.geometry = buffer;
+        parcelQuery.spatialRelationship = "intersects";
+        parcelQuery.outFields = ["*"];
+
+        parcelLayer.queryFeatures(parcelQuery).then((results) => {
+          if (results.features.length > 0) {
+            // Generate the report
+            let reportContent = `
+              <h1>Test Report</h1>
+              <table border="1">
+                <tr>
+                  <th>Address</th>
+                  <th>Owner</th>
+                </tr>`;
+
+            results.features.forEach((feature) => {
+              const address = feature.attributes.Address || "Unknown";
+              const owner = feature.attributes.Owner || "Unknown";
+              reportContent += `
+                <tr>
+                  <td>${address}</td>
+                  <td>${owner}</td>
+                </tr>`;
+            });
+
+            reportContent += "</table>";
+
+            // Open the report in a new tab
+            const reportWindow = window.open("", "_blank");
+            reportWindow.document.write(reportContent);
+            reportWindow.document.close();
+          } else {
+            alert("No parcels intersect the buffer.");
+          }
+        });
+      });
+    });
+  </script>
+</body>
+</html>
