@@ -40,28 +40,46 @@
 
   <script>
     require([
-      "esri/Map",
-      "esri/views/MapView",
-      "esri/layers/FeatureLayer",
-      "esri/rest/locator",
-      "esri/Graphic",
-      "esri/geometry/geometryEngine",
-      "esri/rest/query",
-      "esri/geometry/Point",
-      "esri/identity/IdentityManager"
-    ], function(Map, MapView, FeatureLayer, locator, Graphic, geometryEngine, query, Point, IdentityManager) {
-      
-      // Authenticate user
-      const portalUrl = "https://bhmi.maps.arcgis.com";
-      IdentityManager.registerOAuthInfos([{
-        appId: "irNkcjLIpo2qE5aA", // Replace with your app ID from ArcGIS Online
-        portalUrl: portalUrl,
-        popup: false
-      }]);
+  "esri/Map",
+  "esri/views/MapView",
+  "esri/layers/FeatureLayer",
+  "esri/rest/locator",
+  "esri/Graphic",
+  "esri/geometry/geometryEngine",
+  "esri/rest/query",
+  "esri/geometry/Point",
+  "esri/identity/IdentityManager",
+  "esri/identity/OAuthInfo"
+], function(Map, MapView, FeatureLayer, locator, Graphic, geometryEngine, query, Point, IdentityManager, OAuthInfo) {
+  
+  // Define portal URL
+  const portalUrl = "https://bhmi.maps.arcgis.com";
 
-      IdentityManager.checkSignInStatus(portalUrl).catch(() => {
-        IdentityManager.getCredential(portalUrl + "/sharing");
-      });
+  // Configure OAuth authentication
+  const oauthInfo = new OAuthInfo({
+    appId: "irNkcjLIpo2qE5aA", // Replace with your registered App ID (Client ID)
+    portalUrl: portalUrl,
+    popup: false // Set to true to avoid full-page redirection for login
+  });
+
+  // Register OAuth information
+  IdentityManager.registerOAuthInfos([oauthInfo]);
+
+  // Check if the user is already signed in
+  IdentityManager.checkSignInStatus(portalUrl + "/sharing")
+    .then(() => {
+      console.log("User is already signed in.");
+    })
+    .catch(() => {
+      // Prompt the user to sign in
+      IdentityManager.getCredential(portalUrl + "/sharing")
+        .then(() => {
+          console.log("User signed in successfully.");
+        })
+        .catch((error) => {
+          console.error("Authentication error:", error);
+        });
+    });
 
       // Create the map and view
       const map = new Map({
