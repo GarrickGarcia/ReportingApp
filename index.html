@@ -194,7 +194,10 @@
         const parcelQuery = parcelLayer.createQuery();
         parcelQuery.geometry = buffer;
         parcelQuery.spatialRelationship = "intersects";
-        parcelQuery.outFields = ["*"];
+        // Get all fields
+        // parcelQuery.outFields = ["*"];
+        // get only address and owner fields
+        parcelQuery.outFields = ["address", "owner"];
 
         parcelLayer.queryFeatures(parcelQuery).then((results) => {
           // Highlight each returned parcel
@@ -229,11 +232,11 @@
         const zip = new JSZip();
 
         window.selectedParcels.forEach((feature, index) => {
-          const { Address, Owner } = feature.attributes;
+          const { address, owner } = feature.attributes;
           const doc = new jspdf.jsPDF();
           doc.text(`Parcel Report`, 10, 10);
-          doc.text(`Address: ${Address || "Unknown"}`, 10, 20);
-          doc.text(`Owner: ${Owner || "Unknown"}`, 10, 30);
+          doc.text(`Address: ${address || "Unknown"}`, 10, 20);
+          doc.text(`Owner: ${owner || "Unknown"}`, 10, 30);
           zip.file(`Parcel_Report_${index + 1}.pdf`, doc.output("blob"));
         });
 
