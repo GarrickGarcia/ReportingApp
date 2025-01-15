@@ -59,31 +59,17 @@
       
       const portalUrl = "https://bhmi.maps.arcgis.com";
 
-      /// Configure OAuth authentication
-  const oauthInfo = new OAuthInfo({
-    appId: "irNkcjLIpo2qE5aA", // Replace with your registered App ID (Client ID)
-    portalUrl: portalUrl,
-    popup: false // Set to true to avoid full-page redirection for login
-  });
-
-  // Register OAuth information
-  IdentityManager.registerOAuthInfos([oauthInfo]);
+      // OAuth Configuration
+      const oauthInfo = new OAuthInfo({
+        appId: "irNkcjLIpo2qE5aA",
+        portalUrl: portalUrl,
+        popup: false
+      });
+      IdentityManager.registerOAuthInfos([oauthInfo]);
 
   // Check if the user is already signed in
-  IdentityManager.checkSignInStatus(portalUrl + "/sharing")
-    .then(() => {
-      console.log("User is already signed in.");
-    })
-    .catch(() => {
-      // Prompt the user to sign in
-      IdentityManager.getCredential(portalUrl + "/sharing")
-        .then(() => {
-          console.log("User signed in successfully.");
-        })
-        .catch((error) => {
-          console.error("Authentication error:", error);
-        });
-    });
+      IdentityManager.checkSignInStatus(portalUrl + "/sharing")
+        .catch(() => IdentityManager.getCredential(portalUrl + "/sharing"));
 
       const map = new Map({
         basemap: "streets-navigation-vector"
@@ -103,6 +89,7 @@
 
       const geocodeUrl = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer";
 
+      // Geocoding Functionality
       document.getElementById("geocodeBtn").addEventListener("click", function() {
         const address = document.getElementById("address").value;
         if (!address) {
@@ -133,6 +120,7 @@
         });
       });
 
+      // Buffer and Highlight Parcels
       document.getElementById("bufferBtn").addEventListener("click", function() {
         if (!window.geocodedPoint) {
           alert("Please geocode an address first.");
@@ -166,6 +154,9 @@
         parcelQuery.outFields = ["*"];
 
         parcelLayer.queryFeatures(parcelQuery).then((results) => {
+          view.graphics.removeAll(); // Clear previous graphics
+          view.graphics.add(bufferGraphic); // Re-add buffer graphic
+
           results.features.forEach((feature) => {
             const highlightGraphic = new Graphic({
               geometry: feature.geometry,
@@ -180,10 +171,12 @@
             });
             view.graphics.add(highlightGraphic);
           });
+
           window.selectedParcels = results.features;
         });
       });
 
+      // Generate Reports
       document.getElementById("reportBtn").addEventListener("click", function() {
         if (!window.selectedParcels || window.selectedParcels.length === 0) {
           alert("No parcels selected. Please buffer first.");
